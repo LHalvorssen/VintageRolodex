@@ -1,7 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer } from '@react-navigation/native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   useFonts,
   PlayfairDisplay_400Regular,
@@ -9,11 +11,14 @@ import {
 } from '@expo-google-fonts/playfair-display';
 import { Lato_400Regular, Lato_700Bold } from '@expo-google-fonts/lato';
 import AppNavigator from './src/navigation/AppNavigator';
+import OnboardingNavigator from './src/navigation/OnboardingNavigator';
 import { seedIfEmpty } from './src/data/seed';
-import { COLORS, FONTS } from './src/constants/theme';
+import { getContacts } from './src/storage/contacts';
+import { COLORS } from './src/constants/theme';
 
 export default function App() {
   const [dataReady, setDataReady] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
   const [fontsLoaded] = useFonts({
     PlayfairDisplay_400Regular,
     PlayfairDisplay_700Bold,
@@ -22,7 +27,23 @@ export default function App() {
   });
 
   useEffect(() => {
-    seedIfEmpty().then(() => setDataReady(true));
+    async function init() {
+      await seedIfEmpty();
+
+      const done = await AsyncStorage.getItem('onboarding_complete');
+      const contacts = await getContacts();
+
+      if (!done && contacts.length === 0) {
+        setShowOnboarding(true);
+      }
+
+      setDataReady(true);
+    }
+    init();
+  }, []);
+
+  const handleOnboardingComplete = useCallback(() => {
+    setShowOnboarding(false);
   }, []);
 
   if (!fontsLoaded || !dataReady) {
@@ -35,10 +56,16 @@ export default function App() {
   }
 
   return (
-    <NavigationContainer>
-      <StatusBar style="dark" />
-      <AppNavigator />
-    </NavigationContainer>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <NavigationContainer>
+        <StatusBar style="dark" />
+        {showOnboarding ? (
+          <OnboardingNavigator onComplete={handleOnboardingComplete} />
+        ) : (
+          <AppNavigator />
+        )}
+      </NavigationContainer>
+    </GestureHandlerRootView>
   );
 }
 
