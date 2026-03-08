@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Pressable } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -9,11 +9,28 @@ import Animated, {
 import * as Haptics from 'expo-haptics';
 import { COLORS, FONTS, SPACING, CARD_STYLE } from '../constants/theme';
 import { getWarmthColor, getLastContactedText, getWarmthState } from '../utils/warmth';
+import { getContacts, updateContact } from '../storage/contacts';
 
 export default function CardDetailScreen({ route }) {
-  const { contact } = route.params;
+  const { contactId } = route.params;
+  const [contact, setContact] = useState(null);
   const [showingFront, setShowingFront] = useState(true);
   const flipProgress = useSharedValue(0);
+
+  useEffect(() => {
+    getContacts().then((contacts) => {
+      const found = contacts.find((c) => c.id === contactId);
+      if (found) setContact(found);
+    });
+  }, [contactId]);
+
+  if (!contact) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={COLORS.accent} />
+      </View>
+    );
+  }
 
   const warmthColor = getWarmthColor(contact.lastContacted);
   const isCold = getWarmthState(contact.lastContacted) === 'cold';
@@ -23,6 +40,13 @@ export default function CardDetailScreen({ route }) {
     const toValue = showingFront ? 1 : 0;
     flipProgress.value = withTiming(toValue, { duration: 500 });
     setShowingFront(!showingFront);
+  };
+
+  const handleLogContact = async () => {
+    const now = new Date().toISOString();
+    const updated = await updateContact(contact.id, { lastContacted: now });
+    setContact(updated);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   };
 
   const frontStyle = useAnimatedStyle(() => ({
@@ -98,6 +122,11 @@ export default function CardDetailScreen({ route }) {
           ) : null}
 
           <View style={styles.divider} />
+
+          <TouchableOpacity style={styles.logBtn} onPress={handleLogContact}>
+            <Text style={styles.logBtnText}>Log Contact</Text>
+          </TouchableOpacity>
+
           <Text style={styles.actionsLabel}>Quick Actions</Text>
           <View style={styles.actionsRow}>
             <TouchableOpacity style={styles.actionBtn}>
@@ -206,6 +235,19 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.textPrimary,
     lineHeight: 22,
+  },
+  logBtn: {
+    backgroundColor: COLORS.accent,
+    paddingVertical: SPACING.sm + 2,
+    paddingHorizontal: SPACING.lg,
+    borderRadius: 8,
+    alignSelf: 'center',
+    marginBottom: SPACING.lg,
+  },
+  logBtnText: {
+    fontFamily: FONTS.bodyBold,
+    fontSize: 14,
+    color: COLORS.white,
   },
   actionsLabel: {
     fontFamily: FONTS.body,

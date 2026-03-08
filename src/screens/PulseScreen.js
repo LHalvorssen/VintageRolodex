@@ -2,7 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { View, Text, FlatList, StyleSheet } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { COLORS, FONTS, SPACING, CARD_STYLE } from '../constants/theme';
-import { getContacts } from '../data/storage';
+import { getContacts } from '../storage/contacts';
 import { getWarmthState, getWarmthColor, getLastContactedText } from '../utils/warmth';
 
 export default function PulseScreen() {

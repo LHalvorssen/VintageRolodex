@@ -5,14 +5,19 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
 } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { COLORS, FONTS, SPACING, CARD_STYLE } from '../constants/theme';
-import { addContact } from '../data/storage';
+import { addContact } from '../storage/contacts';
 
 const RELATIONSHIP_TYPES = ['Mentor', 'Friend', 'Family', 'Orbit'];
 
@@ -22,6 +27,13 @@ export default function AddContactScreen({ navigation }) {
   const [relationshipType, setRelationshipType] = useState('');
   const [howWeKnow, setHowWeKnow] = useState('');
   const [thingToRemember, setThingToRemember] = useState('');
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const cardScale = useSharedValue(1);
+  const cardAnimStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: cardScale.value }],
+  }));
 
   const canAdvance = () => {
     if (step === 0) return name.trim() && relationshipType;
@@ -43,7 +55,21 @@ export default function AddContactScreen({ navigation }) {
     if (step > 0) setStep(step - 1);
   };
 
+  const resetForm = () => {
+    setStep(0);
+    setName('');
+    setRelationshipType('');
+    setHowWeKnow('');
+    setThingToRemember('');
+    setError('');
+    setSaving(false);
+  };
+
   const handleSave = async () => {
+    if (saving) return;
+    setSaving(true);
+    setError('');
+
     try {
       await addContact({
         name: name.trim(),
@@ -51,22 +77,24 @@ export default function AddContactScreen({ navigation }) {
         howWeKnow: howWeKnow.trim(),
         thingToRemember: thingToRemember.trim(),
       });
+
+      cardScale.value = withSequence(
+        withTiming(1.05, { duration: 150 }),
+        withTiming(1, { duration: 150 })
+      );
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert('Added!', `${name} has been added to your Rolodex.`, [
-        {
-          text: 'OK',
-          onPress: () => {
-            setStep(0);
-            setName('');
-            setRelationshipType('');
-            setHowWeKnow('');
-            setThingToRemember('');
-            navigation.navigate('Rolodex');
-          },
-        },
-      ]);
-    } catch (error) {
-      Alert.alert('Error', error.message);
+
+      setTimeout(() => {
+        resetForm();
+        navigation.navigate('Rolodex');
+      }, 600);
+    } catch (err) {
+      setSaving(false);
+      if (err.message === 'Rolodex is full') {
+        setError('Your Rolodex is full. Remove a card to add someone new.');
+      } else {
+        setError(err.message);
+      }
     }
   };
 
@@ -92,7 +120,7 @@ export default function AddContactScreen({ navigation }) {
 
         {/* Step 1: Name + Relationship */}
         {step === 0 && (
-          <View style={styles.card}>
+          <Animated.View style={[styles.card, cardAnimStyle]}>
             <Text style={styles.stepTitle}>Who are they?</Text>
             <Text style={styles.label}>Name</Text>
             <TextInput
@@ -128,12 +156,12 @@ export default function AddContactScreen({ navigation }) {
                 </TouchableOpacity>
               ))}
             </View>
-          </View>
+          </Animated.View>
         )}
 
         {/* Step 2: How you know them */}
         {step === 1 && (
-          <View style={styles.card}>
+          <Animated.View style={[styles.card, cardAnimStyle]}>
             <Text style={styles.stepTitle}>How do you know {name}?</Text>
             <Text style={styles.label}>The Story</Text>
             <TextInput
@@ -146,12 +174,12 @@ export default function AddContactScreen({ navigation }) {
               numberOfLines={3}
               autoFocus
             />
-          </View>
+          </Animated.View>
         )}
 
         {/* Step 3: Thing to remember */}
         {step === 2 && (
-          <View style={styles.card}>
+          <Animated.View style={[styles.card, cardAnimStyle]}>
             <Text style={styles.stepTitle}>One thing to remember</Text>
             <Text style={styles.subtitle}>
               What's something about {name} you don't want to forget?
@@ -166,7 +194,8 @@ export default function AddContactScreen({ navigation }) {
               numberOfLines={3}
               autoFocus
             />
-          </View>
+            {error ? <Text style={styles.errorText}>{error}</Text> : null}
+          </Animated.View>
         )}
 
         {/* Navigation buttons */}
@@ -179,7 +208,7 @@ export default function AddContactScreen({ navigation }) {
           <TouchableOpacity
             style={[styles.nextBtn, !canAdvance() && styles.nextBtnDisabled]}
             onPress={handleNext}
-            disabled={!canAdvance()}
+            disabled={!canAdvance() || saving}
           >
             <Text style={styles.nextBtnText}>
               {step === 2 ? 'Add to Rolodex' : 'Next'}
@@ -281,6 +310,12 @@ const styles = StyleSheet.create({
   },
   typeTextActive: {
     color: COLORS.white,
+  },
+  errorText: {
+    fontFamily: FONTS.body,
+    fontSize: 14,
+    color: COLORS.coldRed,
+    marginTop: SPACING.sm,
   },
   buttonRow: {
     flexDirection: 'row',

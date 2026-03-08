@@ -1,4 +1,5 @@
-import { getContacts, saveContacts } from './storage';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getContacts } from '../storage/contacts';
 
 const DAY_MS = 1000 * 60 * 60 * 24;
 
@@ -67,6 +68,6 @@ const SEED_CONTACTS = [
 export async function seedIfEmpty() {
   const existing = await getContacts();
   if (existing.length === 0) {
-    await saveContacts(SEED_CONTACTS);
+    await AsyncStorage.setItem('@rolodex_contacts', JSON.stringify(SEED_CONTACTS));
   }
 }
