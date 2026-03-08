@@ -28,13 +28,17 @@ export default function App() {
 
   useEffect(() => {
     async function init() {
-      await seedIfEmpty();
-
       const done = await AsyncStorage.getItem('onboarding_complete');
       const contacts = await getContacts();
 
       if (!done && contacts.length === 0) {
+        // Fresh install — show onboarding, don't seed dummy data
         setShowOnboarding(true);
+      } else {
+        // Returning user — seed dummy data if storage is empty
+        // (covers the case where onboarding was completed but
+        //  the user deleted all contacts)
+        await seedIfEmpty();
       }
 
       setDataReady(true);
