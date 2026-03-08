@@ -59,7 +59,7 @@ const GRAIN_URI = `data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http:/
 
 const AnimatedTouchable = Animated.createAnimatedComponent(TouchableOpacity);
 
-export default function RolodexCard({ contact, onPress, isNew, index = 0 }) {
+export default function RolodexCard({ contact, onPress, isNew, index = 0, wheelMode = false }) {
   const warmthState = getWarmthState(contact.lastContacted);
   const warmthColor = getWarmthColor(contact.lastContacted);
   const targetValue = stateToValue(warmthState);
@@ -162,8 +162,21 @@ export default function RolodexCard({ contact, onPress, isNew, index = 0 }) {
     <AnimatedTouchable
       onPress={onPress}
       activeOpacity={0.85}
-      style={[styles.card, cardAnimStyle]}
+      style={[
+        styles.card,
+        wheelMode && styles.cardWheel,
+        cardAnimStyle,
+      ]}
     >
+      {/* Studio light details (wheel mode only) */}
+      {wheelMode && (
+        <>
+          <View style={styles.topHighlight} pointerEvents="none" />
+          <View style={styles.leftEdge} pointerEvents="none" />
+          <View style={styles.specularLine} pointerEvents="none" />
+        </>
+      )}
+
       {/* Grain texture overlay */}
       <Animated.View style={[styles.grainContainer, grainOpacity]} pointerEvents="none">
         <ImageBackground
@@ -205,6 +218,49 @@ const styles = StyleSheet.create({
     shadowColor: '#2C2418',
     shadowOffset: { width: 0, height: 2 },
     overflow: 'hidden',
+  },
+  cardWheel: {
+    width: 280,
+    height: 160,
+    borderRadius: 6,
+    marginHorizontal: 0,
+    marginVertical: 0,
+    padding: SPACING.md,
+    shadowColor: '#000',
+    shadowOpacity: 0.07,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  topHighlight: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.70)',
+    borderTopLeftRadius: 6,
+    borderTopRightRadius: 6,
+    zIndex: 1,
+  },
+  leftEdge: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    bottom: 0,
+    width: 1,
+    backgroundColor: 'rgba(0,0,0,0.04)',
+    borderTopLeftRadius: 6,
+    borderBottomLeftRadius: 6,
+    zIndex: 1,
+  },
+  specularLine: {
+    position: 'absolute',
+    top: '50%',
+    left: 0,
+    right: 0,
+    height: 2,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    zIndex: 0,
   },
   grainContainer: {
     ...StyleSheet.absoluteFillObject,
