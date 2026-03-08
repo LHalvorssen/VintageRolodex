@@ -1,16 +1,37 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { View, FlatList, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { COLORS, FONTS, SPACING, CARD_STYLE } from '../constants/theme';
 import { getContacts } from '../storage/contacts';
-import ContactCard from '../components/ContactCard';
+import RolodexCard from '../components/RolodexCard';
 
 export default function RolodexScreen({ navigation }) {
   const [contacts, setContacts] = useState([]);
+  const knownIds = useRef(new Set());
+  const [newIds, setNewIds] = useState(new Set());
 
   useFocusEffect(
     useCallback(() => {
-      getContacts().then(setContacts);
+      getContacts().then((loaded) => {
+        // Detect newly added contacts (IDs we haven't seen before)
+        const freshIds = new Set();
+        loaded.forEach((c) => {
+          if (!knownIds.current.has(c.id)) {
+            freshIds.add(c.id);
+          }
+        });
+
+        // On first load, all IDs are "known" — no slide-in
+        if (knownIds.current.size === 0) {
+          loaded.forEach((c) => knownIds.current.add(c.id));
+          setNewIds(new Set());
+        } else {
+          setNewIds(freshIds);
+          loaded.forEach((c) => knownIds.current.add(c.id));
+        }
+
+        setContacts(loaded);
+      });
     }, [])
   );
 
@@ -35,10 +56,12 @@ export default function RolodexScreen({ navigation }) {
         <FlatList
           data={contacts}
           keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <ContactCard
+          renderItem={({ item, index }) => (
+            <RolodexCard
               contact={item}
               onPress={() => navigation.navigate('CardDetail', { contactId: item.id })}
+              isNew={newIds.has(item.id)}
+              index={index}
             />
           )}
           contentContainerStyle={styles.list}

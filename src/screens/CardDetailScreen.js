@@ -4,7 +4,11 @@ import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
+  withSequence,
+  withDelay,
   interpolate,
+  interpolateColor,
+  Easing,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { COLORS, FONTS, SPACING, CARD_STYLE } from '../constants/theme';
@@ -16,6 +20,12 @@ export default function CardDetailScreen({ route }) {
   const [contact, setContact] = useState(null);
   const [showingFront, setShowingFront] = useState(true);
   const flipProgress = useSharedValue(0);
+
+  // Snap-back animated values
+  const snapBg = useSharedValue(0);   // 0 = current state, 1 = flash white, 2 = warm
+  const dogEarShrink = useSharedValue(1); // 1 = current size, 0 = gone
+  const rippleScale = useSharedValue(1);
+  const rippleOpacity = useSharedValue(0);
 
   useEffect(() => {
     getContacts().then((contacts) => {
@@ -32,8 +42,14 @@ export default function CardDetailScreen({ route }) {
     );
   }
 
+  const warmthState = getWarmthState(contact.lastContacted);
   const warmthColor = getWarmthColor(contact.lastContacted);
-  const isCold = getWarmthState(contact.lastContacted) === 'cold';
+  const isCold = warmthState === 'cold';
+  const wasFadingOrCold = warmthState === 'fading' || warmthState === 'cold';
+
+  // Map warmth state to aging bg colors for the card
+  const currentCardBg = warmthState === 'cold' ? '#EDE0C4'
+    : warmthState === 'fading' ? '#F5EDD8' : '#FDFAF3';
 
   const handleFlip = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -43,11 +59,63 @@ export default function CardDetailScreen({ route }) {
   };
 
   const handleLogContact = async () => {
+    // Fire snap-back animation BEFORE the state update so we animate from old state
+    // 1. Background flash: current → white (150ms) → warm (300ms)
+    snapBg.value = 0;
+    snapBg.value = withSequence(
+      withTiming(1, { duration: 150 }),
+      withTiming(2, { duration: 300, easing: Easing.out(Easing.cubic) })
+    );
+
+    // 2. Dog-ear shrinks to 0
+    dogEarShrink.value = 1;
+    dogEarShrink.value = withTiming(0, {
+      duration: 300,
+      easing: Easing.out(Easing.cubic),
+    });
+
+    // 3. Ripple from center
+    rippleScale.value = 1;
+    rippleOpacity.value = 0.15;
+    rippleScale.value = withTiming(1.6, { duration: 400, easing: Easing.out(Easing.cubic) });
+    rippleOpacity.value = withDelay(50, withTiming(0, { duration: 350 }));
+
+    // 4. Haptic feedback
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+    // 5. Persist the update
     const now = new Date().toISOString();
     const updated = await updateContact(contact.id, { lastContacted: now });
     setContact(updated);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   };
+
+  // Snap-back card background animation
+  const snapBgStyle = useAnimatedStyle(() => {
+    if (snapBg.value === 0) return {};
+    const bgColor = interpolateColor(
+      snapBg.value,
+      [0, 1, 2],
+      [currentCardBg, '#FFFEF9', '#FDFAF3']
+    );
+    return { backgroundColor: bgColor };
+  });
+
+  // Snap-back dog-ear animation
+  const snapDogEarStyle = useAnimatedStyle(() => {
+    const currentSize = warmthState === 'cold' ? 16
+      : warmthState === 'fading' ? 10 : 0;
+    const size = currentSize * dogEarShrink.value;
+    return {
+      borderTopWidth: size,
+      borderRightWidth: size,
+    };
+  });
+
+  // Ripple effect
+  const rippleStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: rippleScale.value }],
+    opacity: rippleOpacity.value,
+  }));
 
   const frontStyle = useAnimatedStyle(() => ({
     transform: [
@@ -76,18 +144,25 @@ export default function CardDetailScreen({ route }) {
         <Animated.View
           style={[
             styles.card,
-            isCold && { backgroundColor: COLORS.cardCold },
+            { backgroundColor: currentCardBg },
             frontStyle,
+            snapBgStyle,
           ]}
         >
+          {/* Dog-ear */}
+          <Animated.View style={[styles.dogEar, snapDogEarStyle]} pointerEvents="none" />
+
+          {/* Ripple overlay */}
+          <Animated.View style={[styles.ripple, rippleStyle]} pointerEvents="none" />
+
           <View style={styles.warmthRow}>
             <View style={[styles.warmthDot, { backgroundColor: warmthColor }]} />
             <Text style={styles.warmthLabel}>
-              {getWarmthState(contact.lastContacted)}
+              {warmthState}
             </Text>
           </View>
-          <Text style={styles.name}>{contact.name}</Text>
-          <Text style={styles.type}>{contact.relationshipType}</Text>
+          <Text style={[styles.name, isCold && { color: '#8A7F72' }]}>{contact.name}</Text>
+          <Text style={[styles.type, isCold && { opacity: 0.4 }]}>{contact.relationshipType}</Text>
           {contact.city ? <Text style={styles.detail}>{contact.city}</Text> : null}
           <View style={styles.divider} />
           <Text style={styles.lastContacted}>
@@ -100,8 +175,9 @@ export default function CardDetailScreen({ route }) {
           style={[
             styles.card,
             styles.cardBack,
-            isCold && { backgroundColor: COLORS.cardCold },
+            { backgroundColor: currentCardBg },
             backStyle,
+            snapBgStyle,
           ]}
         >
           <Text style={styles.backTitle}>Notes</Text>
@@ -178,6 +254,33 @@ const styles = StyleSheet.create({
   },
   cardBack: {
     position: 'absolute',
+  },
+  dogEar: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    width: 0,
+    height: 0,
+    borderTopColor: '#D9C9A3',
+    borderRightColor: '#F5F0E8',
+    borderBottomWidth: 0,
+    borderLeftWidth: 0,
+    borderBottomColor: 'transparent',
+    borderLeftColor: 'transparent',
+    borderStyle: 'solid',
+    zIndex: 1,
+  },
+  ripple: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    width: 200,
+    height: 200,
+    marginTop: -100,
+    marginLeft: -100,
+    borderRadius: 100,
+    backgroundColor: COLORS.accent,
+    zIndex: 0,
   },
   warmthRow: {
     flexDirection: 'row',
