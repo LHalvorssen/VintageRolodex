@@ -11,9 +11,6 @@
       "resizeMode": "contain",
       "backgroundColor": "#F5F0E8"
     },
-    "plugins": [
-      "react-native-reanimated"
-    ],
     "ios": {
       "supportsTablet": true
     },
